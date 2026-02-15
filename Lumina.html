@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Lumina - Block Blast AI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-main: #0f172a;
+        }
+        
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            overscroll-behavior: none;
+            touch-action: none; /* Prevents phone from scrolling while playing */
+            user-select: none;
+            background: var(--bg-main);
+            color: white;
+            transition: background 0.8s ease;
+            position: fixed; /* Locks the viewport on mobile */
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .settings-card {
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(24px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+        }
+
+        .grid-cell {
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .ghost-cell {
+            background: rgba(59, 130, 246, 0.5) !important;
+            border: 1px solid rgba(255, 255, 255, 0.4) !important;
+        }
+
+        @keyframes clearRow {
+            0% { transform: scale(1.1); filter: brightness(2); }
+            100% { transform: scale(0); opacity: 0; }
+        }
+
+        .clearing {
+            animation: clearRow 0.4s ease-out forwards;
+        }
+
+        .switch-ui {
+            width: 42px;
+            height: 22px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 20px;
+            position: relative;
+            cursor: pointer;
+        }
+        .switch-ui.active { background: #3b82f6; }
+        .switch-ui::after {
+            content: '';
+            position: absolute;
+            width: 18px; height: 18px;
+            background: white;
+            border-radius: 50%;
+            top: 2px; left: 2px;
+            transition: 0.3s;
+        }
+        .switch-ui.active::after { left: 22px; }
+    </style>
+</head>
+<body id="app-body">
+
+    <!-- STARTUP SCREEN -->
+    <div id="startup-screen" class="fixed inset-0 z-[300] bg-slate-950 flex flex-col items-center justify-center p-8 transition-opacity duration-700">
+        <div class="text-center space-y-12 max-w-sm w-full">
+            <div class="space-y-4">
+                <div class="w-20 h-20 bg-blue-600 rounded-3xl mx-auto flex items-center justify-center shadow-2xl rotate-12">
+                    <span class="text-4xl">💎</span>
+                </div>
+                <h1 class="text-5xl font-black tracking-tighter italic">LUMINA</h1>
+                <p class="text-slate-400 text-sm tracking-widest font-semibold uppercase">AI Strategic Blast</p>
+            </div>
+            <div class="space-y-3">
+                <button onclick="startGame()" class="w-full py-5 bg-white text-slate-950 rounded-2xl font-black text-lg">PLAY GAME</button>
+                <button onclick="openSettings()" class="w-full py-4 bg-white/5 border border-white/10 rounded-2xl font-bold text-slate-300">SETTINGS</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MAIN GAME INTERFACE -->
+    <div id="game-interface" class="opacity-0 flex flex-col items-center justify-center p-4 w-full h-full transition-opacity duration-700">
+        <div class="w-full max-w-[360px] flex justify-between items-center mb-4 px-2">
+            <div class="flex gap-4">
+                <div class="text-left">
+                    <p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest">RECORD</p>
+                    <p id="best-score" class="text-xl font-black text-blue-400">0</p>
+                </div>
+                <div class="text-left">
+                    <p class="text-[10px] text-slate-500 font-bold uppercase tracking-widest">SCORE</p>
+                    <p id="current-score" class="text-xl font-black text-white">0</p>
+                </div>
+            </div>
+            <button onclick="openSettings()" class="w-10 h-10 flex items-center justify-center bg-white/5 rounded-xl border border-white/10">⚙️</button>
+        </div>
+
+        <div id="board-wrapper" class="glass-panel p-2 rounded-[24px] shadow-2xl">
+            <div id="grid" class="grid gap-1 w-[280px] h-[280px] sm:w-[320px] sm:h-[320px]"></div>
+        </div>
+
+        <div id="shapes-container" class="mt-8 w-full max-w-[360px] h-24 flex justify-around items-center"></div>
+    </div>
+
+    <!-- SETTINGS MODAL -->
+    <div id="settings-modal" class="fixed inset-0 z-[400] bg-black/70 backdrop-blur-sm hidden flex items-center justify-center p-4" onclick="if(event.target === this) closeSettings()">
+        <div class="settings-card max-w-sm w-full p-8 rounded-[40px] space-y-6">
+            <h3 class="text-2xl font-black tracking-tighter">SETTINGS</h3>
+            <div class="space-y-4">
+                <label class="text-[10px] font-black text-slate-500 uppercase tracking-widest">GRID SIZE</label>
+                <div class="flex gap-2">
+                    <button onclick="changeGridSize(4)" class="grid-btn flex-1 py-3 rounded-xl border border-white/10 text-xs font-bold" id="grid-4">4x4</button>
+                    <button onclick="changeGridSize(8)" class="grid-btn flex-1 py-3 rounded-xl border border-white/10 text-xs font-bold" id="grid-8">8x8</button>
+                </div>
+                <div class="flex justify-between items-center pt-4">
+                    <p class="text-sm font-bold">Haptic Feedback</p>
+                    <div id="vibrate-toggle-ui" onclick="toggleVibrate()" class="switch-ui active"></div>
+                </div>
+            </div>
+            <button onclick="closeSettings()" class="w-full py-4 bg-white text-black rounded-2xl font-bold">CLOSE</button>
+        </div>
+    </div>
+
+    <!-- GAME OVER -->
+    <div id="game-over-modal" class="fixed inset-0 z-[500] bg-slate-950/95 backdrop-blur-xl hidden flex items-center justify-center p-8 opacity-0 transition-opacity">
+        <div class="text-center space-y-12">
+            <h2 class="text-5xl font-black italic">GAME OVER</h2>
+            <div class="py-8">
+                <p class="text-7xl font-black" id="final-score">0</p>
+                <p class="text-blue-500 font-bold tracking-widest uppercase">Points</p>
+            </div>
+            <button onclick="resetGame()" class="w-full py-5 bg-white text-slate-950 rounded-2xl font-black">TRY AGAIN</button>
+        </div>
+    </div>
+
+    <script>
+        let gridSize = parseInt(localStorage.getItem('lumina_grid_size')) || 8;
+        let score = 0;
+        let bestScore = localStorage.getItem('lumina_best') || 0;
+        let isVibrate = localStorage.getItem('lumina_vibrate') !== 'false';
+        let grid = [];
+        let availableShapes = [];
+        let dragItem = null;
+
+        const colors = ['bg-blue-500', 'bg-indigo-500', 'bg-violet-500', 'bg-rose-500', 'bg-emerald-500'];
+        const SHAPES = [ [[1]], [[1,1]], [[1,1,1]], [[1,1],[1,1]], [[1,1,1],[0,1,0]], [[1,1,1,1]] ];
+
+        function init() {
+            document.getElementById('best-score').innerText = bestScore;
+            updateUI();
+        }
+
+        function updateUI() {
+            document.querySelectorAll('.grid-btn').forEach(b => b.classList.remove('bg-blue-600', 'border-transparent', 'text-white'));
+            const activeBtn = document.getElementById(`grid-${gridSize}`);
+            if (activeBtn) activeBtn.classList.add('bg-blue-600', 'border-transparent', 'text-white');
+            document.getElementById('vibrate-toggle-ui').className = isVibrate ? 'switch-ui active' : 'switch-ui';
+        }
+
+        function startGame() {
+            document.getElementById('startup-screen').classList.add('hidden');
+            document.getElementById('game-interface').classList.remove('opacity-0');
+            createGrid();
+            spawnShapes();
+        }
+
+        function createGrid() {
+            const gridEl = document.getElementById('grid');
+            gridEl.innerHTML = '';
+            gridEl.style.gridTemplateColumns = `repeat(${gridSize}, 1fr)`;
+            grid = Array(gridSize).fill().map(() => Array(gridSize).fill(null));
+            for (let r = 0; r < gridSize; r++) {
+                for (let c = 0; c < gridSize; c++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'grid-cell rounded-lg bg-white/[0.04] border border-white/[0.05] w-full h-full';
+                    cell.id = `cell-${r}-${c}`;
+                    gridEl.appendChild(cell);
+                }
+            }
+        }
+
+        function spawnShapes() {
+            const container = document.getElementById('shapes-container');
+            container.innerHTML = '';
+            availableShapes = [];
+            
+            for (let i = 0; i < 3; i++) {
+                const matrix = SHAPES[Math.floor(Math.random() * SHAPES.length)];
+                if (gridSize === 4 && (matrix.length > 2 || matrix[0].length > 2)) { i--; continue; } // Filter large shapes for 4x4
+                
+                const color = colors[Math.floor(Math.random() * colors.length)];
+                const shapeEl = document.createElement('div');
+                shapeEl.className = 'flex items-center justify-center';
+                
+                const visual = renderMatrix(matrix, color, gridSize === 4 ? 24 : 16);
+                shapeEl.appendChild(visual);
+                container.appendChild(shapeEl);
+
+                const shapeObj = { id: i, matrix, color, element: shapeEl, visual };
+                availableShapes.push(shapeObj);
+
+                const startDrag = (e) => {
+                    const t = e.touches ? e.touches[0] : e;
+                    const cellSize = document.getElementById('grid').offsetWidth / gridSize;
+                    const ghost = renderMatrix(matrix, color, cellSize - 2);
+                    ghost.style.position = 'fixed';
+                    ghost.style.zIndex = '1000';
+                    ghost.style.pointerEvents = 'none';
+                    document.body.appendChild(ghost);
+
+                    dragItem = { ...shapeObj, ghost, cellSize, w: matrix[0].length * cellSize, h: matrix.length * cellSize };
+                    visual.style.opacity = '0.2';
+                    moveGhost(t.clientX, t.clientY);
+                };
+
+                shapeEl.addEventListener('mousedown', startDrag);
+                shapeEl.addEventListener('touchstart', startDrag);
+            }
+            checkGameOver();
+        }
+
+        function renderMatrix(m, color, size) {
+            const wrap = document.createElement('div');
+            wrap.style.display = 'grid';
+            wrap.style.gridTemplateColumns = `repeat(${m[0].length}, ${size}px)`;
+            wrap.style.gap = '2px';
+            m.flat().forEach(v => {
+                const d = document.createElement('div');
+                d.style.width = size + 'px'; d.style.height = size + 'px';
+                if (v) d.className = `${color} rounded-sm border border-white/10`;
+                wrap.appendChild(d);
+            });
+            return wrap;
+        }
+
+        function moveGhost(x, y) {
+            if (!dragItem) return;
+            dragItem.ghost.style.left = (x - dragItem.w / 2) + 'px';
+            dragItem.ghost.style.top = (y - dragItem.h - 40) + 'px'; // Offset for finger visibility
+        }
+
+        function onMove(e) {
+            if (!dragItem) return;
+            const t = e.touches ? e.touches[0] : e;
+            moveGhost(t.clientX, t.clientY);
+            
+            document.querySelectorAll('.ghost-cell').forEach(c => c.classList.remove('ghost-cell'));
+            const pos = getGridPos();
+            if (pos && canPlace(dragItem.matrix, pos.r, pos.c)) {
+                for(let i=0; i<dragItem.matrix.length; i++) {
+                    for(let j=0; j<dragItem.matrix[0].length; j++) {
+                        if (dragItem.matrix[i][j]) document.getElementById(`cell-${pos.r+i}-${pos.c+j}`).classList.add('ghost-cell');
+                    }
+                }
+            }
+        }
+
+        function getGridPos() {
+            const gridRect = document.getElementById('grid').getBoundingClientRect();
+            const ghostRect = dragItem.ghost.getBoundingClientRect();
+            const r = Math.round((ghostRect.top - gridRect.top) / (gridRect.height / gridSize));
+            const c = Math.round((ghostRect.left - gridRect.left) / (gridRect.width / gridSize));
+            if (r >= 0 && r <= gridSize - dragItem.matrix.length && c >= 0 && c <= gridSize - dragItem.matrix[0].length) return {r,c};
+            return null;
+        }
+
+        function canPlace(m, r, c) {
+            for(let i=0; i<m.length; i++) for(let j=0; j<m[0].length; j++) if(m[i][j] && grid[r+i][c+j]) return false;
+            return true;
+        }
+
+        function onEnd() {
+            if (!dragItem) return;
+            const pos = getGridPos();
+            if (pos && canPlace(dragItem.matrix, pos.r, pos.c)) {
+                for(let i=0; i<dragItem.matrix.length; i++) {
+                    for(let j=0; j<dragItem.matrix[0].length; j++) {
+                        if (dragItem.matrix[i][j]) {
+                            grid[pos.r+i][pos.c+j] = dragItem.color;
+                            document.getElementById(`cell-${pos.r+i}-${pos.c+j}`).className = `grid-cell rounded-lg ${dragItem.color} border border-white/20`;
+                        }
+                    }
+                }
+                if (isVibrate && navigator.vibrate) navigator.vibrate(10);
+                score += 10;
+                dragItem.element.style.visibility = 'hidden';
+                availableShapes = availableShapes.filter(s => s.id !== dragItem.id);
+                checkLines();
+                if (availableShapes.length === 0) spawnShapes();
+                else checkGameOver();
+            } else {
+                dragItem.visual.style.opacity = '1';
+            }
+            dragItem.ghost.remove();
+            document.querySelectorAll('.ghost-cell').forEach(c => c.classList.remove('ghost-cell'));
+            dragItem = null;
+            document.getElementById('current-score').innerText = score;
+        }
+
+        function checkLines() {
+            let rs = [], cs = [];
+            for(let i=0; i<gridSize; i++) {
+                if (grid[i].every(v => v)) rs.push(i);
+                if (grid.every(r => r[i])) cs.push(i);
+            }
+            if (rs.length || cs.length) {
+                const targets = new Set();
+                rs.forEach(r => { for(let c=0; c<gridSize; c++) targets.add(`${r},${c}`); });
+                cs.forEach(c => { for(let r=0; r<gridSize; r++) targets.add(`${r},${c}`); });
+                targets.forEach(k => {
+                    const [r, c] = k.split(',').map(Number);
+                    const el = document.getElementById(`cell-${r}-${c}`);
+                    el.classList.add('clearing');
+                    setTimeout(() => {
+                        grid[r][c] = null;
+                        el.className = 'grid-cell rounded-lg bg-white/[0.04] border border-white/[0.05]';
+                        el.classList.remove('clearing');
+                    }, 400);
+                });
+                score += targets.size * 2;
+                if (isVibrate && navigator.vibrate) navigator.vibrate([15, 30]);
+            }
+            if (score > bestScore) {
+                bestScore = score;
+                document.getElementById('best-score').innerText = bestScore;
+                localStorage.setItem('lumina_best', bestScore);
+            }
+        }
+
+        function checkGameOver() {
+            const possible = availableShapes.some(s => {
+                for(let r=0; r<=gridSize-s.matrix.length; r++) {
+                    for(let c=0; c<=gridSize-s.matrix[0].length; c++) if(canPlace(s.matrix, r, c)) return true;
+                }
+                return false;
+            });
+            if (!possible) {
+                document.getElementById('final-score').innerText = score;
+                const m = document.getElementById('game-over-modal');
+                m.classList.remove('hidden');
+                setTimeout(() => m.classList.add('opacity-100'), 50);
+            }
+        }
+
+        function changeGridSize(s) { gridSize = s; localStorage.setItem('lumina_grid_size', s); updateUI(); resetGame(); }
+        function toggleVibrate() { isVibrate = !isVibrate; localStorage.setItem('lumina_vibrate', isVibrate); updateUI(); }
+        function openSettings() { document.getElementById('settings-modal').classList.remove('hidden'); }
+        function closeSettings() { document.getElementById('settings-modal').classList.add('hidden'); }
+        function resetGame() { score = 0; document.getElementById('current-score').innerText = '0'; document.getElementById('game-over-modal').classList.add('hidden'); createGrid(); spawnShapes(); }
+
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('touchmove', onMove, { passive: false });
+        window.addEventListener('mouseup', onEnd);
+        window.addEventListener('touchend', onEnd);
+        init();
+    </script>
+</body>
+</html>
